@@ -1,6 +1,7 @@
 package com.tencent.cloud.oceanus.connector.file.table;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
@@ -11,18 +12,24 @@ import org.apache.flink.types.RowKind;
 
 import com.tencent.cloud.oceanus.connector.file.source.FileSource;
 
+import java.util.Arrays;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** */
 public class FileDynamicSource implements ScanTableSource {
 
-    private final String path;
+    private final Path[] paths;
     private final ResolvedSchema schema;
 
     public FileDynamicSource(String path, ResolvedSchema schema) {
-        this.path = checkNotNull(path);
+        this(Stream.of(checkNotNull(path)).map(Path::new).toArray(Path[]::new), schema);
+    }
+
+    public FileDynamicSource(Path[] paths, ResolvedSchema schema) {
+        this.paths = checkNotNull(paths);
         this.schema = checkNotNull(schema);
     }
 
@@ -35,18 +42,21 @@ public class FileDynamicSource implements ScanTableSource {
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext context) {
         final TypeInformation<RowData> producedTypeInfo =
                 context.createTypeInformation(schema.toPhysicalRowDataType());
-        return SourceProvider.of(new FileSource(producedTypeInfo));
+
+        return SourceProvider.of(new FileSource(producedTypeInfo, paths));
     }
 
     @Override
     public DynamicTableSource copy() {
-        return new FileDynamicSource(path, schema);
+        return new FileDynamicSource(paths, schema);
     }
 
     @Override
     public String asSummaryString() {
         return "FileSource";
     }
+
+    // ------------------------------------------------------------------------
 
     @Override
     public boolean equals(Object o) {
@@ -57,16 +67,23 @@ public class FileDynamicSource implements ScanTableSource {
             return false;
         }
         FileDynamicSource that = (FileDynamicSource) o;
-        return Objects.equals(path, that.path) && Objects.equals(schema, that.schema);
+        return Arrays.equals(paths, that.paths) && Objects.equals(schema, that.schema);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(path, schema);
+        int result = Objects.hash(schema);
+        result = 31 * result + Arrays.hashCode(paths);
+        return result;
     }
 
     @Override
     public String toString() {
-        return "FileDynamicSource{" + "path='" + path + '\'' + ", schema=" + schema + '}';
+        return "FileDynamicSource{"
+                + "paths="
+                + Arrays.toString(paths)
+                + ", schema="
+                + schema
+                + '}';
     }
 }
